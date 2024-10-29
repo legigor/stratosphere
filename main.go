@@ -10,13 +10,35 @@ import (
 type StratumRequest struct {
 	ID     int           `json:"id"`
 	Method string        `json:"method"`
-	Params []interface{} `json:"params"`
+	Params interface{}   `json:"params"`
 }
 
 type StratumResponse struct {
 	ID     int           `json:"id"`
 	Result interface{}   `json:"result"`
-	Error  []interface{} `json:"error"`
+	Error  interface{}   `json:"error"`
+}
+
+type MiningSubscribeParams struct {
+	Client string `json:"client"`
+}
+
+type MiningAuthorizeParams struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type MiningSubscribeResult struct {
+	SubscriptionID string `json:"subscription_id"`
+}
+
+type MiningAuthorizeResult struct {
+	Authorized bool `json:"authorized"`
+}
+
+type StratumError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 // Use this list https://minerstat.com/pool-status-checker
@@ -46,14 +68,14 @@ func main() {
 	subscribeReq := StratumRequest{
 		ID:     1,
 		Method: "mining.subscribe",
-		Params: []interface{}{"my-client/0.1"},
+		Params: MiningSubscribeParams{Client: "my-client/0.1"},
 	}
 	sendRequest(writer, subscribeReq)
 
 	authorizeReq := StratumRequest{
 		ID:     2,
 		Method: "mining.authorize",
-		Params: []interface{}{USERNAME, PASSWORD},
+		Params: MiningAuthorizeParams{Username: USERNAME, Password: PASSWORD},
 	}
 	sendRequest(writer, authorizeReq)
 
@@ -94,11 +116,28 @@ func handleResponse(line []byte) {
 		return
 	}
 
-	if response.ID == 1 {
-		log.Println("Subscription:", response.Result)
-	} else if response.ID == 2 {
-		log.Println("Authorization:", response.Result)
-	} else {
+	switch response.ID {
+	case 1:
+		result, ok := response.Result.(map[string]interface{})
+		if !ok {
+			log.Printf("unexpected result type for subscription: %T", response.Result)
+			return
+		}
+		subscribeResult := MiningSubscribeResult{
+			SubscriptionID: result["subscription_id"].(string),
+		}
+		log.Println("Subscription:", subscribeResult)
+	case 2:
+		result, ok := response.Result.(map[string]interface{})
+		if !ok {
+			log.Printf("unexpected result type for authorization: %T", response.Result)
+			return
+		}
+		authorizeResult := MiningAuthorizeResult{
+			Authorized: result["authorized"].(bool),
+		}
+		log.Println("Authorization:", authorizeResult)
+	default:
 		log.Println("Response:", string(line))
 	}
 }
